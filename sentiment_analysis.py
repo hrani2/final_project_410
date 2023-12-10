@@ -13,8 +13,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from IPython.display import display, HTML
+import nltk
+nltk.download('vader_lexicon')
+from nltk.sentiment.vader import SentimentIntensityAnalyzer as S
+from nltk.tokenize import word_tokenize
+nltk.download('punkt')
+import re
+from nltk.corpus import wordnet as wn
+nltk.download('wordnet')
 
-# !pip install praw
+# ! pip install praw
 import praw
 
 CSS = """
@@ -33,46 +41,124 @@ reddit = praw.Reddit(
     check_for_async=False
 )
 
-headlines_uiuc = set()
-for submission in reddit.subreddit('UIUC').hot(limit = None):
-  print(submission.title)
-  headlines_uiuc.add(submission.title)
+headlines_uiuc = []
+comments_uiuc = []
+for submission in reddit.subreddit('UIUC').hot(limit = 500):
+  print(submission.title, "title")
+  comments = []
+  for comment in submission.comments:
+    # print(comment.body, "body")
+    comments.append(comment.body)
+  headlines_uiuc.append(submission.title)
+  # print(headlines_uiuc, "headline")
+  comments_uiuc.append(comments)
+  # print(comments_uiuc, "comment")
+# print(comments_uiuc, "comments_uiuc")
+
+headlines_chicago = []
+comments_chicago = []
+for submission in reddit.subreddit('chicago').hot(limit = 500):
+  print(submission.title, ",title")
+  comments = []
+  for comment in submission.comments:
+    if hasattr(comment, 'body'):
+      comments.append(comment.body)
+    else:
+      continue
+  headlines_chicago.append(submission.title)
+  comments_chicago.append(comments)
+# print(len(headlines_chicago))
+
 print(len(headlines_uiuc))
-
-headlines_chicago = set()
-for submission in reddit.subreddit('chicago').hot(limit = None):
-  print(submission.title)
-  headlines_chicago.add(submission.title)
+print(len(comments_uiuc))
 print(len(headlines_chicago))
+print(len(comments_chicago))
+df = pd.DataFrame({'headline':headlines_uiuc, 'comments':comments_uiuc})
+df['most_association'] = 0
 
-df = pd.DataFrame(headlines_uiuc)
-df.head()
+for index, row in df.iterrows():
+  title = row[0]
+  print(title)
+  # remove stopwords
+  title = re.sub("[\[].*?[\]]", "", title)
+  title =re.sub(r"[^a-zA-Z.]+", ' ', title)
+  tokenize_list = word_tokenize(title)
+  print(tokenize_list)
+  if len(tokenize_list) == 0:
+    continue
 
-df2 = pd.DataFrame(headlines_chicago)
-df2.head()
+  total_association = 0
+  for word in tokenize_list:
+    word1 = word
+    word2 = "food"
+    if len(wn.synsets(word1)) == 0:
+      continue
+    syn1 = wn.synsets(word1)[0]
+    syn2 = wn.synsets(word2)[0]
+    value = syn1.wup_similarity(syn2)
+    if value > total_association:
+      total_association = value
 
+  df.at[index, 'most_association'] = total_association
+df = df.sort_values(by=['most_association'], ascending=False)
+df = df.head(50)
+
+
+
+# Starting filtering of chicago reddit posts
+df2 = pd.DataFrame({'headline':headlines_chicago, 'comments':comments_chicago})
+df2['most_association'] = 0
+
+for index, row in df2.iterrows():
+  title = row[0]
+  print(title)
+  # remove stopwords
+  title = re.sub("[\[].*?[\]]", "", title)
+  title =re.sub(r"[^a-zA-Z.]+", ' ', title)
+  tokenize_list = word_tokenize(title)
+  print(tokenize_list)
+  if len(tokenize_list) == 0:
+    continue
+
+  total_association = 0
+  for word in tokenize_list:
+    word1 = word
+    word2 = "food"
+    if len(wn.synsets(word1)) == 0:
+      continue
+    syn1 = wn.synsets(word1)[0]
+    syn2 = wn.synsets(word2)[0]
+    value = syn1.wup_similarity(syn2)
+    if value > total_association:
+      total_association = value
+
+  df2.at[index, 'most_association'] = total_association
+df2 = df2.sort_values(by=['most_association'], ascending=False)
+df2 = df2.head(50)
+
+# displaying both dfs
 display(df)
 display(df2)
 
-import nltk
-nltk.download('vader_lexicon')
-
-from nltk.sentiment.vader import SentimentIntensityAnalyzer as S
-
+# starting sentiment analysis
 s_uiuc = S()
 results_uiuc = []
 
 s_chicago = S()
 results_chicago = []
 
-for line in headlines_uiuc:
+for index, row in df.iterrows():
+  line = row[0]
   polarity = s_uiuc.polarity_scores(line)
   polarity['headline'] = line
+  polarity['comments'] = row[1]
   results_uiuc.append(polarity)
 
-for line in headlines_chicago:
+for index, row in df2.iterrows():
+  line = row[0]
   polarity = s_chicago.polarity_scores(line)
   polarity['headline'] = line
+  polarity['comments'] = row[1]
   results_chicago.append(polarity)
 
 pprint(results_uiuc[:3], width = 100)
@@ -94,7 +180,7 @@ df.loc[df['compound'] > 0.2, 'label'] = 'positive'
 df.loc[df['compound'] < -0.2, 'label'] = 'negative'
 df.head()
 
-df_main = df[['headline', 'label']]
+df_main = df[['headline', 'comments', 'label', 'compound']]
 df_main
 
 
@@ -103,12 +189,80 @@ df2.loc[df2['compound'] > 0.2, 'label'] = 'positive'
 df2.loc[df2['compound'] < -0.2, 'label'] = 'negative'
 df2.head()
 
-df2_main = df2[['headline', 'label']]
+df2_main = df2[['headline', 'comments', 'label', 'compound']]
 df2_main
 
 display(df_main)
 display(df2_main)
 
+# comments associated with positive sentiments about food
+
+uiuc_comments = []
+for index, row in df.iterrows():
+  comments = row[5]
+  # print(comments)
+  if len(comments) == 0:
+    continue
+  for comment in comments:
+    full_comment = comment
+    # print(comment)
+    # remove stopwords
+    comment = re.sub("[\[].*?[\]]", "", comment)
+    comment =re.sub(r"[^a-zA-Z.]+", ' ', comment)
+    tokenize_list = word_tokenize(comment)
+    # print(tokenize_list)
+    if len(tokenize_list) == 0:
+      continue
+    for word in tokenize_list:
+      word1 = word
+      word2 = "food"
+      if len(wn.synsets(word1)) == 0:
+        continue
+      syn1 = wn.synsets(word1)[0]
+      syn2 = wn.synsets(word2)[0]
+      value = syn1.wup_similarity(syn2)
+      if 0.8 < value and row[3] > 0.2:
+        uiuc_comments.append(full_comment)
+        break
+print(uiuc_comments, "final comments")
+
+
+chicago_comments = []
+for index, row in df2.iterrows():
+  comments = row[5]
+  #print(comments)
+  if len(comments) == 0:
+    continue
+  for comment in comments:
+    full_comment = comment
+    #print(comment)
+    # remove stopwords
+    comment = re.sub("[\[].*?[\]]", "", comment)
+    comment =re.sub(r"[^a-zA-Z.]+", ' ', comment)
+    tokenize_list = word_tokenize(comment)
+    #print(tokenize_list)
+    if len(tokenize_list) == 0:
+      continue
+    for word in tokenize_list:
+      word1 = word
+      word2 = "food"
+      if len(wn.synsets(word1)) == 0:
+        continue
+      syn1 = wn.synsets(word1)[0]
+      syn2 = wn.synsets(word2)[0]
+      value = syn1.wup_similarity(syn2)
+      if 0.8 < value and row[3] > 0.2:
+        chicago_comments.append(full_comment)
+        break
+print(chicago_comments, "final comments")
+
 display(df.label.value_counts(normalize = True) * 100)
 print("\n")
 display(df2.label.value_counts(normalize = True) * 100)
+
+display(df.groupby('label')['compound'].describe())
+display(df2.groupby('label')['compound'].describe())
+
+df.boxplot(by='label', column='compound', figsize=(12,8))
+df2.boxplot(by='label', column='compound', figsize=(12,8))
+
