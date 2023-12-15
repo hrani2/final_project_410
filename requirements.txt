@@ -1,0 +1,9 @@
+
+pprint
+pandas
+numpy
+matplotlib
+seaborn
+IPython
+nltk
+re
