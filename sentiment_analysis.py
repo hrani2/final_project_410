@@ -22,6 +22,10 @@ import re
 from nltk.corpus import wordnet as wn
 nltk.download('wordnet')
 
+"""In this section of code we are installing the necessary packages required to perform the sentiment analysis, and the necessary preprocesses to acquire the text data that we are looking to gather from the subreddits from reddit. This information is all in the requirements.txt as well.
+
+"""
+
 # ! pip install praw
 import praw
 
@@ -41,10 +45,12 @@ reddit = praw.Reddit(
     check_for_async=False
 )
 
+"""In the two sections of code above we are installing and setting up the web crawler for the subreddits so that way we have a means of extracting the content of the subreddit posts."""
+
 headlines_uiuc = []
 comments_uiuc = []
 for submission in reddit.subreddit('UIUC').hot(limit = 500):
-  print(submission.title, "title")
+  # print(submission.title, "title")
   comments = []
   for comment in submission.comments:
     # print(comment.body, "body")
@@ -58,7 +64,7 @@ for submission in reddit.subreddit('UIUC').hot(limit = 500):
 headlines_chicago = []
 comments_chicago = []
 for submission in reddit.subreddit('chicago').hot(limit = 500):
-  print(submission.title, ",title")
+  # print(submission.title, ",title")
   comments = []
   for comment in submission.comments:
     if hasattr(comment, 'body'):
@@ -69,6 +75,10 @@ for submission in reddit.subreddit('chicago').hot(limit = 500):
   comments_chicago.append(comments)
 # print(len(headlines_chicago))
 
+"""In this section of code we are extracting all of the posts from each respective subreddit so that way we have access to the actual contents of the subreddits to use when later on we filter for posts respective to food. This is being done with the webscraper and we make sure to grab both the comments and the titles for each post so they can be analyzed later
+
+"""
+
 print(len(headlines_uiuc))
 print(len(comments_uiuc))
 print(len(headlines_chicago))
@@ -78,19 +88,19 @@ df['most_association'] = 0
 
 for index, row in df.iterrows():
   title = row[0]
-  print(title)
+  # print(title)
   # remove stopwords
   title = re.sub("[\[].*?[\]]", "", title)
   title =re.sub(r"[^a-zA-Z.]+", ' ', title)
   tokenize_list = word_tokenize(title)
-  print(tokenize_list)
+  # print(tokenize_list)
   if len(tokenize_list) == 0:
     continue
 
   total_association = 0
   for word in tokenize_list:
     word1 = word
-    word2 = "food"
+    word2 = "taste"
     if len(wn.synsets(word1)) == 0:
       continue
     syn1 = wn.synsets(word1)[0]
@@ -140,6 +150,10 @@ df2 = df2.head(50)
 display(df)
 display(df2)
 
+"""In this section we are filtering the posts by using the token of "taste" and "food" to filter for posts that pertain to that topic, we used the token of "taste" & "food" because we found that keyword had the best results pertaining to food. Essentially, we check the similarity score of the title of each post with the words food and taste to see how relevant they are for our idea. If they contain either word or have a high similarity score, they will likely be used for the next phase of our project.
+We implemented this through the use of tokenization.
+"""
+
 # starting sentiment analysis
 s_uiuc = S()
 results_uiuc = []
@@ -166,6 +180,8 @@ print("\n")
 print("\n")
 pprint(results_chicago[:3], width = 100)
 
+"""In this section of code we are performing sentiment analysis from the respective posts that we have obtained earlier through the use of tokenization, we obtained the sentiment analysis through the use of polarization which allowed for us to identify if posts were negative, neutral, and positive as indicated within the output. We did this for each respective subreddit: UIUC and chicago, from which now we have a baseline for the tone of the posts which will then allow us to utilize this data later on to assess the top rated posts."""
+
 df = pd.DataFrame.from_records(results_uiuc)
 df.head()
 
@@ -174,6 +190,8 @@ df2.head()
 
 display(df)
 display(df2)
+
+"""This section of code we created a dataframe for each respective subreddit from which we then take the top results, in the output above you can see that there are neg, neu, pos, and compound fields with values indicating the respective correlation to each label. From this we have actually identified our first baseline of sentiment analysis, in the next segment we will actually begin filtering the results in order to identify the posts with either positive or negative labels by utilizing the compound score that we have found in order to do so."""
 
 df['label'] = 'neutral'
 df.loc[df['compound'] > 0.2, 'label'] = 'positive'
@@ -194,6 +212,8 @@ df2_main
 
 display(df_main)
 display(df2_main)
+
+"""In this section of code we have actually identified if a post is deemed either positive or negative by utilizing a threshold value of 0.2 in the compound field. Essentially, what that means is if a post has a compound value higher than 0.2 then it is deemed positive, negative otherwise. From this we now have actually identified the positive and negative opinions about food within each subreddit, in the next code segments we will then begin to explore this text data further."""
 
 # comments associated with positive sentiments about food
 
@@ -256,13 +276,21 @@ for index, row in df2.iterrows():
         break
 print(chicago_comments, "final comments")
 
+"""In this section of code we have filtered the data to obtain all of the positive food opinions within each subreddit and we have used the token "food" in order to display these positive opinions, and in doing so the output reflects the respective opinions about food within the posts of each subreddit, from which we can leverage this data further to explore interesting findings that we have found."""
+
 display(df.label.value_counts(normalize = True) * 100)
 print("\n")
 display(df2.label.value_counts(normalize = True) * 100)
 
+"""In this section of code have found the value counts for each subreddit and displayed the percentages of the opinions that we have obtained for the subreddits UIUC and chicago respectively in regards to their opinions about food."""
+
 display(df.groupby('label')['compound'].describe())
 display(df2.groupby('label')['compound'].describe())
 
+"""In this section of code we are displaying the respective compound values for each dataframe and their label values, from which we can see the total amount of posts for each label and the statistics found for the label within each subreddit."""
+
 df.boxplot(by='label', column='compound', figsize=(12,8))
 df2.boxplot(by='label', column='compound', figsize=(12,8))
+
+"""We have now displayed a visualization of the findings that we have obtained from the text data, so that you can clearly see the different relationships that each subreddit has alongside food from which we can see that chicago had more variability when it came to negative food whereas UIUC had more variability when it comes to positive food reviews, but overall the opinions in relation to food appear to be relatively similar when we compare both of the cities, as illustrated within the boxplot."""
 
